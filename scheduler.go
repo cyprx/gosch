@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	delay "github.com/cyprx/gosch/pkg/delayqueue"
@@ -14,7 +15,8 @@ import (
 	"github.com/go-redis/redis/v8"
 )
 
-// Scheduler manages distributor and workers, it also accepts schedule request
+// Scheduler manages distributor and workers,
+// it exposes simple interfaces to interact with the queue
 type Scheduler struct {
 	store       Store
 	delayqueue  DelayQueue
@@ -26,6 +28,8 @@ type Scheduler struct {
 	partitions   map[string]HandlerFunc
 	distributors []*distributor
 	workers      []*worker
+
+	mu *sync.Mutex
 }
 
 type Option interface {
@@ -121,6 +125,7 @@ func NewScheduler(namespace string, redisc *redis.Client, opts ...Option) *Sched
 		scanInterval: 5 * time.Second,
 		lockTTL:      60 * time.Second,
 		partitions:   make(map[string]HandlerFunc),
+		mu:           &sync.Mutex{},
 	}
 	for _, opt := range opts {
 		opt.Apply(sch)
@@ -184,7 +189,9 @@ func (sch *Scheduler) Remove(ctx context.Context, partition, key string) error {
 	return nil
 }
 
-func (sch *Scheduler) RegisterHandlerFunc(ctx context.Context, partition string, hdl HandlerFunc) error {
+func (sch *Scheduler) RegisterPartition(ctx context.Context, partition string, hdl HandlerFunc) error {
+	sch.mu.Lock()
+	defer sch.mu.Unlock()
 	if err := sch.store.CreatePartition(ctx, partition); err != nil {
 		return fmt.Errorf("schedule: create partition: %w", err)
 	}

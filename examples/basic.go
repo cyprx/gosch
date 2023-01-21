@@ -20,7 +20,7 @@ func main() {
 	key0 := "key_0"
 	key1 := "key_1"
 
-	if err := sch.RegisterHandlerFunc(ctx, partition, dummyHandle); err != nil {
+	if err := sch.RegisterPartition(ctx, partition, dummyHandle); err != nil {
 		log.Fatal(err)
 	}
 
