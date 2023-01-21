@@ -14,7 +14,19 @@ import (
 
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
-	redisc := redis.NewClient(&redis.Options{})
+
+	// Connect to redis
+	redisURL := os.Getenv("REDIS_URL")
+	if redisURL == "" {
+		redisURL = "redis://localhost:6379/0"
+	}
+	opts, err := redis.ParseURL(redisURL)
+	if err != nil {
+		log.Fatal(err)
+	}
+	redisc := redis.NewClient(opts)
+
+	// Create new scheduler with partitions
 	sch := schedule.NewScheduler("test", redisc)
 	partition := "par_0"
 	key0 := "key_0"
@@ -24,6 +36,7 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// Run the queue
 	go sch.Run(ctx)
 
 	if err := sch.Schedule(ctx, schedule.QueueItem{
@@ -43,6 +56,7 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// Graceful shutdown
 	<-ctx.Done()
 	sch.Close()
 	cancel()
