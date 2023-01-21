@@ -1,5 +1,7 @@
 # Gosch - A simple delay queue backed by redis
 
+![build](https://github.com/cyprx/gosch/actions/workflows/go.yml/badge.svg)
+
 Gosch provides simple methods to schedule an item for later processing, it supports horizontal scaling by manual adding partitions
 
 ## Installation
