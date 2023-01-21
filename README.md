@@ -4,6 +4,9 @@
 
 Gosch provides simple methods to schedule an item for later processing, it supports horizontal scaling by manual adding partitions
 
+## Prerequisites
+- Redis 6.0+
+
 ## Installation
 ```shell
 # go 1.18+
