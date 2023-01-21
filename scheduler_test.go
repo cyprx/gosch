@@ -61,11 +61,11 @@ func (s *schedulerTestSuite) AfterTest(_, _ string) {
 func (s *schedulerTestSuite) BeforeTest(_, _ string) {
 }
 
-func (s *schedulerTestSuite) TestRegisterHandler_Success() {
+func (s *schedulerTestSuite) TestRegisterPartition_Success() {
 	ctx := context.Background()
 	par := "par_0"
 
-	err := s.sch.RegisterHandlerFunc(ctx, par, s.dummyHandlerFunc1)
+	err := s.sch.RegisterPartition(ctx, par, s.dummyHandlerFunc1)
 	s.Require().NoError(err)
 
 	// partition should be created in redis
@@ -92,7 +92,7 @@ func (s *schedulerTestSuite) TestSchedule_Success() {
 	ctx := context.Background()
 	par := "par_0"
 
-	err := s.sch.RegisterHandlerFunc(ctx, par, s.dummyHandlerFunc1)
+	err := s.sch.RegisterPartition(ctx, par, s.dummyHandlerFunc1)
 	s.Require().NoError(err)
 
 	err = s.sch.Schedule(ctx, schedule.QueueItem{
@@ -109,7 +109,7 @@ func (s *schedulerTestSuite) TestRemove_Success() {
 	ctx := context.Background()
 	par := "par_0"
 
-	err := s.sch.RegisterHandlerFunc(ctx, par, s.dummyHandlerFunc1)
+	err := s.sch.RegisterPartition(ctx, par, s.dummyHandlerFunc1)
 	s.Require().NoError(err)
 
 	err = s.sch.Schedule(ctx, schedule.QueueItem{
@@ -132,7 +132,7 @@ func (s *schedulerTestSuite) TestRun() {
 	key0 := "key_0"
 	key1 := "key_1"
 
-	err := s.sch.RegisterHandlerFunc(ctx, par, s.dummyHandlerFunc2)
+	err := s.sch.RegisterPartition(ctx, par, s.dummyHandlerFunc2)
 	s.Require().NoError(err)
 
 	go s.sch.Run(ctx)
@@ -176,7 +176,7 @@ func (s *schedulerTestSuite) TestRun_WithRemove() {
 	key0 := "key_0"
 	key1 := "key_1"
 
-	err := s.sch.RegisterHandlerFunc(ctx, par, s.dummyHandlerFunc2)
+	err := s.sch.RegisterPartition(ctx, par, s.dummyHandlerFunc2)
 	s.Require().NoError(err)
 
 	go s.sch.Run(ctx)
