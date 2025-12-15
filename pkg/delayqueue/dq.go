@@ -48,7 +48,7 @@ func (q *Queue) Push(ctx context.Context, partition string, it QueueItem) error 
 	// a Remove command is sent, however, since no bad effect expected, we ignore that case
 	pipe := q.redisc.Pipeline()
 	pipe.ZAdd(ctx, zkey, &redis.Z{Score: float64(it.Score), Member: mkey})
-	pipe.Set(ctx, mkey, val, time.Duration(it.Deadline-time.Now().Unix())*time.Second)
+	pipe.Set(ctx, mkey, val, time.Duration(it.Deadline-time.Now().UTC().Unix())*time.Second)
 	if _, err := pipe.Exec(ctx); err != nil {
 		return fmt.Errorf("exec: %w", err)
 	}
