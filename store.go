@@ -12,7 +12,7 @@ type Store interface {
 	ListPartitions(ctx context.Context) ([]string, error)
 	CreatePartition(ctx context.Context, par string) error
 	AcquirePartition(ctx context.Context, par string, ttl time.Duration) (string, error)
-	RenewPartition(ctx context.Context, par string, ttl time.Duration) error
+	RenewPartition(ctx context.Context, par string, token string, ttl time.Duration) error
 	ReleasePartition(ctx context.Context, par string, token string) error
 }
 

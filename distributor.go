@@ -26,7 +26,7 @@ func (d *distributor) run() error {
 		return fmt.Errorf("distributor subscribe: %w", err)
 	}
 	go func() {
-		ticker := time.NewTicker(45 * time.Second)
+		ticker := time.NewTicker(max(d.par.ttl/2, time.Nanosecond))
 		defer func() {
 			ticker.Stop()
 			d.done <- true

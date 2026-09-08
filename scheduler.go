@@ -255,7 +255,7 @@ type partition struct {
 func (p *partition) Renew() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
-	if err := p.sch.store.RenewPartition(ctx, p.name, p.ttl); err != nil {
+	if err := p.sch.store.RenewPartition(ctx, p.name, p.token, p.ttl); err != nil {
 		return fmt.Errorf("renew partition: %w", err)
 	}
 	return nil

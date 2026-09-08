@@ -69,10 +69,19 @@ func (s *Store) ReleasePartition(ctx context.Context, par string, token string) 
 	return nil
 }
 
-func (s *Store) RenewPartition(ctx context.Context, par string, ttl time.Duration) error {
-	_, err := s.redisc.Expire(ctx, s.key(par), ttl).Result()
+func (s *Store) RenewPartition(ctx context.Context, par string, token string, ttl time.Duration) error {
+	renew := redis.NewScript(`
+		if redis.call("get", KEYS[1]) == ARGV[1] then
+			return redis.call("pexpire", KEYS[1], ARGV[2])
+		end
+		return 0
+	`)
+	result, err := renew.Run(ctx, s.redisc, []string{s.key(par)}, token, max(ttl.Milliseconds(), 1)).Int()
 	if err != nil {
-		return fmt.Errorf("expire: %w", err)
+		return fmt.Errorf("renew: %w", err)
+	}
+	if result == 0 {
+		return fmt.Errorf("renew: partition ownership lost")
 	}
 	return nil
 }
