@@ -51,6 +51,8 @@ func (d *distributor) run() error {
 				Partition: d.par.name,
 				Key:       it.Key,
 				Timestamp: it.Score,
+				Counter:   it.Counter,
+				Deadline:  it.Deadline,
 			}); err != nil {
 				log.Printf("[ERR] failed to publish to queue: %v", err)
 			}
