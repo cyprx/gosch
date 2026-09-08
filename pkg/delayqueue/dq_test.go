@@ -247,3 +247,32 @@ func (s *DelayQueueTestSuite) TestSubscribe_WithScore() {
 	s.Require().Equal(1, len(results))
 	s.Assert().Equal(it2, results[0])
 }
+
+func (s *DelayQueueTestSuite) TestSubscribe_ExpiredPayloadPreservesValidJobs() {
+	ctx := context.Background()
+	par := "partition_0"
+	deadline := time.Now().Add(time.Hour).Unix()
+	first := QueueItem{Key: "first", Score: 1, Counter: 2, Deadline: deadline}
+	expired := QueueItem{Key: "expired", Score: 2, Deadline: deadline}
+	last := QueueItem{Key: "last", Score: 3, Counter: 4, Deadline: deadline}
+	for _, it := range []QueueItem{first, expired, last} {
+		s.Require().NoError(s.queue.Push(ctx, par, it))
+	}
+	mkey := s.queue.buildMKey(par, expired.Key)
+	s.Require().NoError(s.redisc.PExpireAt(ctx, mkey, time.Unix(1, 0)).Err())
+	s.Require().Equal(int64(0), s.redisc.Exists(ctx, mkey).Val())
+
+	subctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	ch, err := s.queue.Subscribe(subctx, par)
+	s.Require().NoError(err)
+	var results []QueueItem
+	for it := range ch {
+		results = append(results, it)
+	}
+
+	s.Assert().Equal([]QueueItem{first, last}, results)
+	remaining, err := s.redisc.ZCard(ctx, s.queue.buildZKey(par)).Result()
+	s.Require().NoError(err)
+	s.Assert().Zero(remaining)
+}

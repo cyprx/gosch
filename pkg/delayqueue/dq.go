@@ -82,13 +82,13 @@ func (q *Queue) Subscribe(ctx context.Context, partition string) (chan QueueItem
 				zRangeRem := redis.NewScript(`
 					local values = redis.call("zrange",KEYS[1], 0, ARGV[1], "BYSCORE", "LIMIT", 0, ARGV[2], "WITHSCORES")
 					local results = {}
-					for i, mem in ipairs(values) do 
-					    if (i-1) % 2 == 0 then
-							redis.call("zrem", KEYS[1], mem)
-							local result = redis.call("get", mem)
-							results[i] = result
-						else
-							results[i] = mem
+					for i = 1, #values, 2 do
+						local mem = values[i]
+						redis.call("zrem", KEYS[1], mem)
+						local result = redis.call("get", mem)
+						if result then
+							table.insert(results, result)
+							table.insert(results, values[i+1])
 						end
 					end
 
