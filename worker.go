@@ -30,7 +30,8 @@ func (w *worker) run() error {
 			fnctx, fncancel := context.WithTimeout(context.Background(), time.Second*5)
 			if err := fn(fnctx, it.Key); err != nil {
 				backoff := calcBackoff(it.Counter)
-				if err := w.sch.Schedule(fnctx, QueueItem{
+				retryctx, retrycancel := context.WithTimeout(context.Background(), time.Second*5)
+				if err := w.sch.Schedule(retryctx, QueueItem{
 					Partition:    it.Partition,
 					Key:          it.Key,
 					DelaySeconds: backoff,
@@ -39,6 +40,7 @@ func (w *worker) run() error {
 				}); err != nil {
 					log.Printf("[ERR] failed to schedule: %v", err)
 				}
+				retrycancel()
 			}
 			fncancel()
 		}
