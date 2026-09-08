@@ -36,7 +36,7 @@ func (d *distributor) run() error {
 			select {
 			case <-ticker.C:
 				if err := d.par.Renew(); err != nil {
-					d.close()
+					cancel()
 					return
 				}
 			case <-ctx.Done():

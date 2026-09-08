@@ -2,9 +2,11 @@ package schedule
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	delay "github.com/cyprx/gosch/pkg/delayqueue"
@@ -53,4 +55,58 @@ func TestDistributorPreservesRetryMetadata(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("timed out waiting for distributed job")
 	}
+}
+
+func TestDistributorCloseAfterRenewalFailure(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		store := &renewalFailureStore{failed: make(chan struct{})}
+		sch := &Scheduler{store: store}
+		d := &distributor{
+			dq:   &cancelableDelayQueue{},
+			par:  &partition{sch: sch, name: "orders", token: "owner", ttl: time.Minute},
+			done: make(chan bool, 2),
+		}
+		sch.distributors = []*distributor{d}
+		require.NoError(t, d.run())
+		<-store.failed
+		synctest.Wait()
+
+		closed := make(chan struct{})
+		go func() {
+			sch.Close()
+			close(closed)
+		}()
+		select {
+		case <-closed:
+		case <-time.After(time.Second):
+			t.Fatal("scheduler shutdown blocked after lease renewal failed")
+		}
+	})
+}
+
+type renewalFailureStore struct {
+	Store
+	failed chan struct{}
+}
+
+func (s *renewalFailureStore) RenewPartition(context.Context, string, time.Duration) error {
+	close(s.failed)
+	return errors.New("renewal unavailable")
+}
+
+func (s *renewalFailureStore) ReleasePartition(context.Context, string, string) error {
+	return nil
+}
+
+type cancelableDelayQueue struct {
+	DelayQueue
+}
+
+func (q *cancelableDelayQueue) Subscribe(ctx context.Context, _ string) (chan delay.QueueItem, error) {
+	ch := make(chan delay.QueueItem)
+	go func() {
+		<-ctx.Done()
+		close(ch)
+	}()
+	return ch, nil
 }
