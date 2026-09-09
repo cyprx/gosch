@@ -108,6 +108,9 @@ func encodeItem(it QueueItem) (string, error) {
 	if it.Partition == "" || it.Key == "" {
 		return "", ErrInvalidItem
 	}
+	if strings.Contains(it.Partition, "::") || strings.Contains(it.Key, "::") {
+		return "", ErrInvalidItem
+	}
 	s := fmt.Sprintf(
 		"%s::%s::%d::%d::%d",
 		it.Partition,

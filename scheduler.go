@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -75,10 +76,10 @@ func WithScanInterval(dur time.Duration) Option {
 type HandlerFunc func(ctx context.Context, key string) error
 
 type QueueItem struct {
-	// Partition used to distribute queues and select handler func
+	// Partition selects the queue and handler; must not contain "::".
 	Partition string
 
-	// Key is the unique id to identify the item
+	// Key uniquely identifies the item; must not contain "::".
 	Key string
 
 	// DelaySeconds is number of seconds the item would be delayed until handled
@@ -98,6 +99,9 @@ func (it QueueItem) Validate() error {
 	}
 	if it.Key == "" {
 		return fmt.Errorf("empty key")
+	}
+	if strings.Contains(it.Partition, "::") || strings.Contains(it.Key, "::") {
+		return fmt.Errorf("partition and key must not contain ::")
 	}
 	if it.Counter < 0 {
 		return fmt.Errorf("negative counter")
@@ -196,6 +200,9 @@ func (sch *Scheduler) Remove(ctx context.Context, partition, key string) error {
 }
 
 func (sch *Scheduler) RegisterPartition(ctx context.Context, partition string, hdl HandlerFunc) error {
+	if strings.Contains(partition, "::") {
+		return ErrInvalidPartition
+	}
 	sch.mu.Lock()
 	defer sch.mu.Unlock()
 	if err := sch.store.CreatePartition(ctx, partition); err != nil {

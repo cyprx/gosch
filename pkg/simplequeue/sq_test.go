@@ -108,3 +108,16 @@ func (s *SimpleQueueTestSuite) TestSubscribe() {
 	s.Assert().Equal(it0, results[0])
 	s.Assert().Equal(it1, results[1])
 }
+
+func (s *SimpleQueueTestSuite) TestPublish_RejectDelimiter() {
+	ctx := context.Background()
+	for _, it := range []QueueItem{
+		{Partition: "orders::region", Key: "order-42"},
+		{Partition: "orders", Key: "order::42"},
+	} {
+		s.Assert().ErrorIs(s.queue.Publish(ctx, it), ErrInvalidItem)
+	}
+	count, err := s.redisc.LLen(ctx, s.queueName).Result()
+	s.Require().NoError(err)
+	s.Assert().Zero(count, "rejected items must not be persisted")
+}

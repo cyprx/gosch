@@ -222,3 +222,31 @@ func (s *schedulerTestSuite) dummyHandlerFunc2(ctx context.Context, key string) 
 	s.ch <- key
 	return nil
 }
+
+func TestQueueItemValidateRejectsDelimiter(t *testing.T) {
+	for _, tc := range []struct {
+		partition string
+		key       string
+		wantError bool
+	}{
+		{"orders", "order-42", false},
+		{"orders::region", "order-42", true},
+		{"orders", "order::42", true},
+	} {
+		t.Run(tc.partition+"/"+tc.key, func(t *testing.T) {
+			item := schedule.QueueItem{Partition: tc.partition, Key: tc.key, Deadline: time.Now().Add(time.Hour)}
+			if err := item.Validate(); (err != nil) != tc.wantError {
+				t.Errorf("Validate() = %v, wantError %v", err, tc.wantError)
+			}
+		})
+	}
+}
+
+func (s *schedulerTestSuite) TestRegisterPartition_RejectDelimiter() {
+	ctx := context.Background()
+	err := s.sch.RegisterPartition(ctx, "orders::region", s.dummyHandlerFunc1)
+	s.Assert().Error(err)
+	exists, err := s.redisc.HExists(ctx, s.ns+"/partitions", "orders::region").Result()
+	s.Require().NoError(err)
+	s.Assert().False(exists)
+}

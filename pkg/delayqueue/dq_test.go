@@ -276,3 +276,40 @@ func (s *DelayQueueTestSuite) TestSubscribe_ExpiredPayloadPreservesValidJobs() {
 	s.Require().NoError(err)
 	s.Assert().Zero(remaining)
 }
+
+func (s *DelayQueueTestSuite) TestSubscribe_MalformedPayloadPreservesValidJobs() {
+	ctx := context.Background()
+	par := "partition_0"
+	deadline := time.Now().Add(time.Hour).Unix()
+	first := QueueItem{Key: "first", Score: 1, Deadline: deadline}
+	malformed := QueueItem{Key: "malformed", Score: 2, Deadline: deadline}
+	last := QueueItem{Key: "last", Score: 3, Deadline: deadline}
+	for _, it := range []QueueItem{first, malformed, last} {
+		s.Require().NoError(s.queue.Push(ctx, par, it))
+	}
+	s.Require().NoError(s.redisc.Set(ctx, s.queue.buildMKey(par, malformed.Key), "malformed::invalid-counter::123", time.Hour).Err())
+
+	subctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	ch, err := s.queue.Subscribe(subctx, par)
+	s.Require().NoError(err)
+	var results []QueueItem
+	for it := range ch {
+		results = append(results, it)
+	}
+	s.Assert().Equal([]QueueItem{first, last}, results)
+}
+
+func (s *DelayQueueTestSuite) TestPush_RejectDelimiter() {
+	ctx := context.Background()
+	for _, tc := range []struct{ partition, key string }{
+		{"orders::region", "order-42"},
+		{"orders", "order::42"},
+	} {
+		err := s.queue.Push(ctx, tc.partition, QueueItem{Key: tc.key, Deadline: time.Now().Add(time.Hour).Unix()})
+		s.Assert().Error(err)
+		count, err := s.redisc.Exists(ctx, s.queue.buildZKey(tc.partition), s.queue.buildMKey(tc.partition, tc.key)).Result()
+		s.Require().NoError(err)
+		s.Assert().Zero(count, "rejected item must not be persisted")
+	}
+}

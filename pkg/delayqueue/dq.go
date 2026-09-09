@@ -34,7 +34,7 @@ func NewQueue(rc *redis.Client, namespace string) *Queue {
 }
 
 func (q *Queue) Push(ctx context.Context, partition string, it QueueItem) error {
-	if partition == "" {
+	if partition == "" || strings.Contains(partition, "::") {
 		return ErrInvalidInput
 	}
 	zkey := q.buildZKey(partition)
@@ -109,7 +109,7 @@ func (q *Queue) Subscribe(ctx context.Context, partition string) (chan QueueItem
 					}
 					if err := decodeItemValue(results[i], &it); err != nil {
 						log.Printf("[ERR] failed to parse item(%v): %v", results, err)
-						break
+						continue
 					}
 					ch <- it
 				}
@@ -153,6 +153,9 @@ func decodeItemValue(s string, it *QueueItem) error {
 }
 
 func encodeItemValue(it QueueItem) (string, error) {
+	if strings.Contains(it.Key, "::") {
+		return "", ErrInvalidItem
+	}
 	s := fmt.Sprintf("%s::%d::%d", it.Key, it.Counter, it.Deadline)
 	return s, nil
 }
