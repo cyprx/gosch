@@ -277,3 +277,11 @@ func (s *schedulerTestSuite) TestSchedule_RejectExpiredOrUnreachableDeadline() {
 		s.Assert().Zero(count, "rejected job must not be stored")
 	}
 }
+
+func (s *schedulerTestSuite) TestRegisterPartition_RejectNilHandler() {
+	ctx := context.Background()
+	s.Assert().Error(s.sch.RegisterPartition(ctx, "orders", nil))
+	exists, err := s.redisc.HExists(ctx, s.ns+"/partitions", "orders").Result()
+	s.Require().NoError(err)
+	s.Assert().False(exists, "invalid registration must not be stored")
+}

@@ -212,6 +212,9 @@ func (sch *Scheduler) RegisterPartition(ctx context.Context, partition string, h
 	if strings.Contains(partition, "::") || strings.Contains(partition, "/") {
 		return ErrInvalidPartition
 	}
+	if hdl == nil {
+		return fmt.Errorf("nil handler")
+	}
 	sch.mu.Lock()
 	defer sch.mu.Unlock()
 	if err := sch.store.CreatePartition(ctx, partition); err != nil {

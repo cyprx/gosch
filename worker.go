@@ -31,6 +31,10 @@ func (w *worker) run() error {
 				continue
 			}
 			fn := w.sch.getHandlerFunc(it.Partition)
+			if fn == nil {
+				log.Printf("[ERR] missing handler for partition %q; discarding job %q", it.Partition, it.Key)
+				continue
+			}
 			handlerDeadline := time.Now().Add(5 * time.Second)
 			if deadline.Before(handlerDeadline) {
 				handlerDeadline = deadline

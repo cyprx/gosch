@@ -1,9 +1,11 @@
 package schedule
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"testing"
 	"time"
@@ -127,4 +129,48 @@ func TestWorkerHonorsDeadline(t *testing.T) {
 			require.Zero(t, count, "retry must not outlive the deadline")
 		})
 	}
+}
+
+func TestWorkerContinuesAfterMissingHandler(t *testing.T) {
+	addr := os.Getenv("REDIS_URL")
+	if addr == "" {
+		addr = "redis://localhost:6379"
+	}
+	opts, err := redis.ParseURL(addr)
+	require.NoError(t, err)
+	rc := redis.NewClient(opts)
+	defer rc.Close()
+	namespace := fmt.Sprintf("missing_handler_%d", time.Now().UnixNano())
+	sch := NewScheduler(namespace, rc)
+	defer func() {
+		require.NoError(t, rc.Del(context.Background(), namespace+"/partitions", namespace+"/jobs").Err())
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	processed := make(chan string, 1)
+	require.NoError(t, sch.RegisterPartition(ctx, "orders", func(_ context.Context, key string) error {
+		processed <- key
+		return nil
+	}))
+	deadline := time.Now().Add(time.Hour).Unix()
+	require.NoError(t, sch.simplequeue.Publish(ctx, simple.QueueItem{Partition: "unknown", Key: "unknown-job", Deadline: deadline}))
+	require.NoError(t, sch.simplequeue.Publish(ctx, simple.QueueItem{Partition: "orders", Key: "valid-job", Deadline: deadline}))
+	var logs bytes.Buffer
+	previousOutput := log.Writer()
+	log.SetOutput(&logs)
+	defer log.SetOutput(previousOutput)
+	w := &worker{sch: sch, sq: sch.simplequeue, done: make(chan bool, 1)}
+	require.NoError(t, w.run())
+	defer w.close()
+	select {
+	case key := <-processed:
+		require.Equal(t, "valid-job", key)
+	case <-ctx.Done():
+		t.Fatal("worker stopped before processing the valid job")
+	}
+	require.Contains(t, logs.String(), "unknown")
+	require.Contains(t, logs.String(), "unknown-job")
+	count, err := rc.LLen(ctx, namespace+"/jobs").Result()
+	require.NoError(t, err)
+	require.Zero(t, count, "unsupported job must not be requeued")
 }

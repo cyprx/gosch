@@ -50,7 +50,7 @@ Workers skip expired jobs, and retries stop when their next scheduled time would
 
 Configure and register partitions before calling `Run`. This is not a general thread-safe lifecycle API: do not call `Run` or `Close` concurrently with themselves. Cancel the run context, wait for `Run` to return, then call `Close` once. Cancelling `Run` alone does not stop its workers.
 
-> **Warning:** Every replica in a namespace must register the same nonnil handlers, including during rolling deployments. All workers share one ready queue. Producers also need local partition registration to schedule jobs.
+> **Warning:** Every replica in a namespace must register the same nonnil handlers, including during rolling deployments. All workers share one ready queue. A worker logs and discards jobs for which it has no handler; those jobs are not retried or routed to another replica. Nil handler registration returns an error. Producers also need local partition registration to schedule jobs.
 
 Use a separate namespace for each application or environment. Partition ownership is sticky and does not automatically rebalance when replicas are added. Extra replicas add workers but do not necessarily share existing distributor load.
 
@@ -67,10 +67,9 @@ Each partition normally promotes at most five jobs per second. This is a polling
 
 ## Known limitations pending fixes
 
-- **Missing handlers:** A job for an unregistered partition can currently panic the worker process. Keep handler registrations identical across replicas.
 - **Options:** Nonpositive concurrency, scan intervals, or lock TTLs are not validated. Pass positive values; invalid options can stall processing, panic, or cause excessive polling.
 
-These are correctness gaps to fix, distinct from the best-effort delivery tradeoff above.
+Option validation remains a correctness gap to fix, distinct from the best-effort delivery tradeoff above.
 
 ## Testing
 
