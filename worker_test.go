@@ -25,7 +25,8 @@ func TestWorkerRetriesAfterHandlerTimeout(t *testing.T) {
 	rc := redis.NewClient(opts)
 	defer rc.Close()
 	namespace := fmt.Sprintf("worker_%d", time.Now().UnixNano())
-	sch := NewScheduler(namespace, rc)
+	sch, err := NewScheduler(namespace, rc)
+	require.NoError(t, err)
 	defer func() {
 		require.NoError(t, rc.Del(context.Background(),
 			namespace+"/partitions", namespace+"/jobs",
@@ -83,7 +84,8 @@ func TestWorkerHonorsDeadline(t *testing.T) {
 	for _, scenario := range []string{"expired", "expires-during-handler", "retry-too-late"} {
 		t.Run(scenario, func(t *testing.T) {
 			namespace := fmt.Sprintf("worker_deadline_%d", time.Now().UnixNano())
-			sch := NewScheduler(namespace, rc)
+			sch, err := NewScheduler(namespace, rc)
+			require.NoError(t, err)
 			defer func() {
 				require.NoError(t, rc.Del(context.Background(), namespace+"/partitions", namespace+"/jobs",
 					namespace+"/sorted_sets/orders", namespace+"/maps/orders/job").Err())
@@ -141,7 +143,8 @@ func TestWorkerContinuesAfterMissingHandler(t *testing.T) {
 	rc := redis.NewClient(opts)
 	defer rc.Close()
 	namespace := fmt.Sprintf("missing_handler_%d", time.Now().UnixNano())
-	sch := NewScheduler(namespace, rc)
+	sch, err := NewScheduler(namespace, rc)
+	require.NoError(t, err)
 	defer func() {
 		require.NoError(t, rc.Del(context.Background(), namespace+"/partitions", namespace+"/jobs").Err())
 	}()

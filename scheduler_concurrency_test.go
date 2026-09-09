@@ -12,7 +12,8 @@ import (
 
 func TestConcurrentPartitionRegistrationAndAccess(t *testing.T) {
 	ctx := context.Background()
-	sch := NewScheduler("concurrent", nil)
+	sch, err := NewScheduler("concurrent", nil)
+	require.NoError(t, err)
 	sch.store = &registrationStore{}
 	sch.delayqueue = &registrationDelayQueue{}
 	handler := func(context.Context, string) error { return nil }

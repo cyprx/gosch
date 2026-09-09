@@ -25,7 +25,8 @@ func TestDistributorPreservesRetryMetadata(t *testing.T) {
 	rc := redis.NewClient(opts)
 	defer rc.Close()
 	namespace := fmt.Sprintf("distributor_%d", time.Now().UnixNano())
-	sch := NewScheduler(namespace, rc)
+	sch, err := NewScheduler(namespace, rc)
+	require.NoError(t, err)
 	defer func() {
 		sch.Close()
 		require.NoError(t, rc.Del(context.Background(),
@@ -124,7 +125,8 @@ func TestPartitionRenewRequiresOwnership(t *testing.T) {
 		t.Run(state, func(t *testing.T) {
 			ctx := context.Background()
 			namespace := fmt.Sprintf("renewal_%d", time.Now().UnixNano())
-			sch := NewScheduler(namespace, rc)
+			sch, err := NewScheduler(namespace, rc)
+			require.NoError(t, err)
 			key := namespace + "/partitions::orders"
 			defer rc.Del(ctx, key)
 			token, err := sch.store.AcquirePartition(ctx, "orders", 10*time.Second)

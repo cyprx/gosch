@@ -122,7 +122,7 @@ func (it QueueItem) Validate() error {
 }
 
 // NewScheduler creates a scheduler. Register partitions before Run.
-func NewScheduler(namespace string, redisc *redis.Client, opts ...Option) *Scheduler {
+func NewScheduler(namespace string, redisc *redis.Client, opts ...Option) (*Scheduler, error) {
 	jobQueueName := fmt.Sprintf("%s/jobs", namespace)
 	parKey := fmt.Sprintf("%s/partitions", namespace)
 	rs := store.NewStore(redisc, parKey)
@@ -141,9 +141,21 @@ func NewScheduler(namespace string, redisc *redis.Client, opts ...Option) *Sched
 		mu:           &sync.Mutex{},
 	}
 	for _, opt := range opts {
+		if opt == nil {
+			return nil, fmt.Errorf("nil scheduler option")
+		}
 		opt.Apply(sch)
 	}
-	return sch
+	if sch.concurrent <= 0 {
+		return nil, fmt.Errorf("concurrency must be positive")
+	}
+	if sch.scanInterval <= 0 {
+		return nil, fmt.Errorf("scan interval must be positive")
+	}
+	if sch.lockTTL < time.Millisecond {
+		return nil, fmt.Errorf("lock TTL must be at least one millisecond")
+	}
+	return sch, nil
 }
 
 func (sch *Scheduler) Run(ctx context.Context) {

@@ -27,7 +27,10 @@ func main() {
 	redisc := redis.NewClient(opts)
 
 	// Create new scheduler with partitions
-	sch := schedule.NewScheduler("test", redisc)
+	sch, err := schedule.NewScheduler("test", redisc)
+	if err != nil {
+		log.Fatal(err)
+	}
 	partition := "par_0"
 	key0 := "key_0"
 	key1 := "key_1"

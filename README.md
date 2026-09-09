@@ -29,6 +29,15 @@ REDIS_URL=redis://localhost:6379/0 go run ./examples
 
 The example deliberately returns handler errors to demonstrate retries. Press Ctrl+C to stop it.
 
+`NewScheduler` returns `(*Scheduler, error)`. Handle the error before registering partitions or running the scheduler. Existing callers using a single return value must be updated:
+
+```go
+sch, err := schedule.NewScheduler("my-app", redisc)
+if err != nil {
+    log.Fatal(err)
+}
+```
+
 ## Behavior and limits
 
 - Jobs carry keys, not application payloads. Partitions select handlers.
@@ -65,11 +74,11 @@ Use a separate namespace for each application or environment. Partition ownershi
 
 Each partition normally promotes at most five jobs per second. This is a polling limit, not a measured throughput guarantee. No automatic balancing, cron, workflows, priorities, or dashboard are provided.
 
-## Known limitations pending fixes
+## Option validation
 
-- **Options:** Nonpositive concurrency, scan intervals, or lock TTLs are not validated. Pass positive values; invalid options can stall processing, panic, or cause excessive polling.
+Construction returns an error and a nil scheduler for a nil option, nonpositive concurrency, a nonpositive scan interval, or a lock TTL below one millisecond. The TTL minimum matches Redis expiry precision.
 
-Option validation remains a correctness gap to fix, distinct from the best-effort delivery tradeoff above.
+Options apply in order; the final configuration is validated. Defaults are used only when an option is omitted, not as a fallback for invalid values. Choose intervals appropriate for your workload: very short valid intervals still increase Redis traffic.
 
 ## Testing
 

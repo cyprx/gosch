@@ -42,7 +42,9 @@ func TestRunSchedulerSuite(t *testing.T) {
 }
 
 func (s *schedulerTestSuite) SetupTest() {
-	s.sch = schedule.NewScheduler(s.ns, s.redisc, schedule.WithScanInterval(1*time.Second))
+	var err error
+	s.sch, err = schedule.NewScheduler(s.ns, s.redisc, schedule.WithScanInterval(1*time.Second))
+	s.Require().NoError(err)
 	s.ch = make(chan string)
 
 }
