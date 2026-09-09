@@ -4,12 +4,12 @@
 
 Gosch is a lightweight Go library for best-effort delayed jobs. Schedule a key, then let its partition's handler load the application data and perform the work.
 
-> **Warning:** Successful scheduling does not guarantee execution. Crashes and Redis failures can lose jobs. Use Gosch for work that tolerates loss or can be recovered independently, such as cache refreshes and periodic reconciliation. Handlers should tolerate repeated execution.
+> **Note:** Delivery is best effort. Jobs may be lost during failures; handlers should tolerate repeated execution.
 
 ## Prerequisites
 
 - Go 1.25+
-- Redis 6.2+; local validation uses Redis 7. The queue uses [`ZRANGE BYSCORE`](https://redis.io/docs/latest/commands/zrange/) and [`RPOP count`](https://redis.io/docs/latest/commands/rpop/).
+- Redis 6.2+
 
 ## Installation
 
@@ -29,7 +29,7 @@ REDIS_URL=redis://localhost:6379/0 go run ./examples
 
 The example deliberately returns handler errors to demonstrate retries. Press Ctrl+C to stop it.
 
-`NewScheduler` returns `(*Scheduler, error)`. Handle the error before registering partitions or running the scheduler. Existing callers using a single return value must be updated:
+Handle constructor errors before registering partitions or starting the scheduler:
 
 ```go
 sch, err := schedule.NewScheduler("my-app", redisc)
@@ -38,30 +38,25 @@ if err != nil {
 }
 ```
 
-## Behavior and limits
+## Scheduling
 
-- Jobs carry keys, not application payloads. Partitions select handlers.
-- Keys and partitions must be nonempty and must not contain `::`. Partitions must not contain `/`; job keys may contain `/`.
-- Existing jobs with unsupported partition names are not migrated automatically.
-- Scheduling the same partition/key updates its delayed entry. It does not deduplicate work already queued or running.
-- Delays use whole seconds. Polling and backlog can make execution late; there is no precise timing or completion-order guarantee.
-- `Remove` only removes delayed entries. It cannot cancel queued or running handlers, which may schedule another retry.
-- Handler errors trigger a retry after 20 seconds only if that retry would be due before the deadline. There is no acknowledgement, crash recovery, dead-letter queue, or replay API.
-- Handlers receive a context ending at the earlier of five seconds or the job deadline and must honor it. This cannot forcibly stop user code. A blocked handler can block shutdown; handler panics are not recovered.
+- Keys and partitions must be nonempty and exclude `::`. Partition names must also exclude `/`.
+- Scheduling the same partition/key updates its delayed entry. `Remove` only cancels delayed entries; neither affects work already queued or running.
+- Delays use whole seconds. Polling and backlog may delay execution.
+- `Deadline` must be in the future and after the scheduled time. Expired jobs are skipped, even before their first attempt.
+- Handler errors retry after 20 seconds, provided the retry is due before the deadline.
 
-## Deadlines
-
-`Deadline` is required and uses whole-second Unix precision. It must be in the future and later than the scheduled time; otherwise scheduling returns an error without storing the job. The low-level delay queue also requires a valid deadline.
-
-Workers skip expired jobs, and retries stop when their next scheduled time would reach or exceed the deadline. Redis payloads expire at the deadline. There is no guaranteed first attempt: a job may expire while waiting for a worker. A handler already running must honor its context to stop at the deadline.
+Handlers must honor their context, which expires after five seconds or at the job deadline, whichever comes first. Gosch cannot forcibly stop handlers or recover their panics.
 
 ## Deployment
 
-Configure and register partitions before calling `Run`. This is not a general thread-safe lifecycle API: do not call `Run` or `Close` concurrently with themselves. Cancel the run context, wait for `Run` to return, then call `Close` once. Cancelling `Run` alone does not stop its workers.
+Register partitions before `Run`. To stop, cancel its context, wait for `Run` to return, then call `Close` once. Do not call lifecycle methods concurrently. Shutdown waits for handlers to finish.
 
-> **Warning:** Every replica in a namespace must register the same nonnil handlers, including during rolling deployments. All workers share one ready queue. A worker logs and discards jobs for which it has no handler; those jobs are not retried or routed to another replica. Nil handler registration returns an error. Producers also need local partition registration to schedule jobs.
+> **Note:** All replicas in a namespace must register the same handlers. Jobs received without a matching handler are logged and discarded.
 
-Use a separate namespace for each application or environment. Partition ownership is sticky and does not automatically rebalance when replicas are added. Extra replicas add workers but do not necessarily share existing distributor load.
+Use a separate namespace per application or environment. Adding replicas adds workers; existing partition ownership does not automatically rebalance.
+
+## Options and defaults
 
 | Setting | Default |
 | --- | --- |
@@ -72,13 +67,7 @@ Use a separate namespace for each application or environment. Partition ownershi
 | Handler timeout | Up to 5 seconds, bounded by the job deadline |
 | Retry delay | 20 seconds |
 
-Each partition normally promotes at most five jobs per second. This is a polling limit, not a measured throughput guarantee. No automatic balancing, cron, workflows, priorities, or dashboard are provided.
-
-## Option validation
-
-Construction returns an error and a nil scheduler for a nil option, nonpositive concurrency, a nonpositive scan interval, or a lock TTL below one millisecond. The TTL minimum matches Redis expiry precision.
-
-Options apply in order; the final configuration is validated. Defaults are used only when an option is omitted, not as a fallback for invalid values. Choose intervals appropriate for your workload: very short valid intervals still increase Redis traffic.
+Concurrency and scan intervals must be positive; lock TTL must be at least 1 ms. Invalid or nil options return a constructor error.
 
 ## Testing
 
