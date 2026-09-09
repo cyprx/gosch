@@ -162,7 +162,10 @@ func (sch *Scheduler) Schedule(ctx context.Context, item QueueItem) error {
 	if err := item.Validate(); err != nil {
 		return err
 	}
-	if _, ok := sch.partitions[item.Partition]; !ok {
+	sch.mu.Lock()
+	_, ok := sch.partitions[item.Partition]
+	sch.mu.Unlock()
+	if !ok {
 		return ErrInvalidPartition
 	}
 
@@ -179,7 +182,10 @@ func (sch *Scheduler) Schedule(ctx context.Context, item QueueItem) error {
 }
 
 func (sch *Scheduler) Remove(ctx context.Context, partition, key string) error {
-	if _, ok := sch.partitions[partition]; !ok {
+	sch.mu.Lock()
+	_, ok := sch.partitions[partition]
+	sch.mu.Unlock()
+	if !ok {
 		return ErrInvalidPartition
 	}
 	if err := sch.delayqueue.Remove(ctx, partition, key); err != nil {
@@ -241,6 +247,8 @@ func (sch *Scheduler) distribute(ctx context.Context) error {
 }
 
 func (sch *Scheduler) getHandlerFunc(par string) HandlerFunc {
+	sch.mu.Lock()
+	defer sch.mu.Unlock()
 	return sch.partitions[par]
 }
 
