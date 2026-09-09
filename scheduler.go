@@ -76,7 +76,7 @@ func WithScanInterval(dur time.Duration) Option {
 type HandlerFunc func(ctx context.Context, key string) error
 
 type QueueItem struct {
-	// Partition selects the queue and handler; must not contain "::".
+	// Partition selects the queue and handler; must not contain "/" or "::".
 	Partition string
 
 	// Key uniquely identifies the item; must not contain "::".
@@ -103,6 +103,9 @@ func (it QueueItem) Validate() error {
 	if strings.Contains(it.Partition, "::") || strings.Contains(it.Key, "::") {
 		return fmt.Errorf("partition and key must not contain ::")
 	}
+	if strings.Contains(it.Partition, "/") {
+		return ErrInvalidPartition
+	}
 	if it.Counter < 0 {
 		return fmt.Errorf("negative counter")
 	}
@@ -112,7 +115,7 @@ func (it QueueItem) Validate() error {
 	return nil
 }
 
-// NewScheduler creates an instance of scheduler, it should be safe to use across multi goroutines
+// NewScheduler creates a scheduler. Register partitions before Run.
 func NewScheduler(namespace string, redisc *redis.Client, opts ...Option) *Scheduler {
 	jobQueueName := fmt.Sprintf("%s/jobs", namespace)
 	parKey := fmt.Sprintf("%s/partitions", namespace)
@@ -200,7 +203,7 @@ func (sch *Scheduler) Remove(ctx context.Context, partition, key string) error {
 }
 
 func (sch *Scheduler) RegisterPartition(ctx context.Context, partition string, hdl HandlerFunc) error {
-	if strings.Contains(partition, "::") {
+	if strings.Contains(partition, "::") || strings.Contains(partition, "/") {
 		return ErrInvalidPartition
 	}
 	sch.mu.Lock()

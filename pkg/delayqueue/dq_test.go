@@ -313,3 +313,21 @@ func (s *DelayQueueTestSuite) TestPush_RejectDelimiter() {
 		s.Assert().Zero(count, "rejected item must not be persisted")
 	}
 }
+
+func (s *DelayQueueTestSuite) TestPartitionSlashCannotOverwriteOrRemoveAnotherJob() {
+	ctx := context.Background()
+	deadline := time.Now().Add(time.Hour).Unix()
+	s.Require().NoError(s.queue.Push(ctx, "orders", QueueItem{Key: "eu/42", Deadline: deadline}))
+
+	err := s.queue.Push(ctx, "orders/eu", QueueItem{Key: "42", Deadline: deadline})
+	s.Assert().ErrorIs(err, ErrInvalidInput)
+	value, err := s.redisc.Get(ctx, s.queue.buildMKey("orders", "eu/42")).Result()
+	s.Require().NoError(err)
+	s.Assert().Equal(fmt.Sprintf("eu/42::0::%d", deadline), value)
+
+	err = s.queue.Remove(ctx, "orders/eu", "42")
+	s.Assert().ErrorIs(err, ErrInvalidInput)
+	value, err = s.redisc.Get(ctx, s.queue.buildMKey("orders", "eu/42")).Result()
+	s.Require().NoError(err)
+	s.Assert().Equal(fmt.Sprintf("eu/42::0::%d", deadline), value)
+}

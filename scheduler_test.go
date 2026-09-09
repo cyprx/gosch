@@ -232,6 +232,8 @@ func TestQueueItemValidateRejectsDelimiter(t *testing.T) {
 		{"orders", "order-42", false},
 		{"orders::region", "order-42", true},
 		{"orders", "order::42", true},
+		{"orders/eu", "42", true},
+		{"orders", "eu/42", false},
 	} {
 		t.Run(tc.partition+"/"+tc.key, func(t *testing.T) {
 			item := schedule.QueueItem{Partition: tc.partition, Key: tc.key, Deadline: time.Now().Add(time.Hour)}
@@ -247,6 +249,15 @@ func (s *schedulerTestSuite) TestRegisterPartition_RejectDelimiter() {
 	err := s.sch.RegisterPartition(ctx, "orders::region", s.dummyHandlerFunc1)
 	s.Assert().Error(err)
 	exists, err := s.redisc.HExists(ctx, s.ns+"/partitions", "orders::region").Result()
+	s.Require().NoError(err)
+	s.Assert().False(exists)
+}
+
+func (s *schedulerTestSuite) TestRegisterPartition_RejectSlash() {
+	ctx := context.Background()
+	err := s.sch.RegisterPartition(ctx, "orders/eu", s.dummyHandlerFunc1)
+	s.Assert().ErrorIs(err, schedule.ErrInvalidPartition)
+	exists, err := s.redisc.HExists(ctx, s.ns+"/partitions", "orders/eu").Result()
 	s.Require().NoError(err)
 	s.Assert().False(exists)
 }

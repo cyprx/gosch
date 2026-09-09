@@ -34,7 +34,7 @@ func NewQueue(rc *redis.Client, namespace string) *Queue {
 }
 
 func (q *Queue) Push(ctx context.Context, partition string, it QueueItem) error {
-	if partition == "" || strings.Contains(partition, "::") {
+	if partition == "" || strings.Contains(partition, "::") || strings.Contains(partition, "/") {
 		return ErrInvalidInput
 	}
 	zkey := q.buildZKey(partition)
@@ -56,7 +56,7 @@ func (q *Queue) Push(ctx context.Context, partition string, it QueueItem) error 
 }
 
 func (q *Queue) Remove(ctx context.Context, partition string, key string) error {
-	if partition == "" {
+	if partition == "" || strings.Contains(partition, "/") {
 		return ErrInvalidInput
 	}
 	zkey := q.buildZKey(partition)
