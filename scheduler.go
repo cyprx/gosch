@@ -88,8 +88,7 @@ type QueueItem struct {
 	// Counter is number of re-delivery
 	Counter int64
 
-	// Deadline is the timestamp when item would be discarded
-	// Scheduler would try to deliver message once before discarding it
+	// Deadline cuts off execution and retries, at whole-second precision.
 	Deadline time.Time
 }
 
@@ -111,6 +110,13 @@ func (it QueueItem) Validate() error {
 	}
 	if it.Deadline.Unix() < 0 {
 		return fmt.Errorf("negative deadline")
+	}
+	now := time.Now()
+	if it.Deadline.Unix() <= now.Unix() {
+		return fmt.Errorf("deadline expired")
+	}
+	if now.Add(time.Duration(it.DelaySeconds)*time.Second).Unix() >= it.Deadline.Unix() {
+		return fmt.Errorf("scheduled time must precede deadline")
 	}
 	return nil
 }

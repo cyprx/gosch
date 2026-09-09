@@ -26,10 +26,23 @@ func (w *worker) run() error {
 	}
 	go func() {
 		for it := range ch {
+			deadline := time.Unix(it.Deadline, 0)
+			if !time.Now().Before(deadline) {
+				continue
+			}
 			fn := w.sch.getHandlerFunc(it.Partition)
-			fnctx, fncancel := context.WithTimeout(context.Background(), time.Second*5)
-			if err := fn(fnctx, it.Key); err != nil {
+			handlerDeadline := time.Now().Add(5 * time.Second)
+			if deadline.Before(handlerDeadline) {
+				handlerDeadline = deadline
+			}
+			fnctx, fncancel := context.WithDeadline(context.Background(), handlerDeadline)
+			err := fn(fnctx, it.Key)
+			fncancel()
+			if err != nil {
 				backoff := calcBackoff(it.Counter)
+				if !time.Now().Add(time.Duration(backoff) * time.Second).Before(deadline) {
+					continue
+				}
 				retryctx, retrycancel := context.WithTimeout(context.Background(), time.Second*5)
 				if err := w.sch.Schedule(retryctx, QueueItem{
 					Partition:    it.Partition,
@@ -42,7 +55,6 @@ func (w *worker) run() error {
 				}
 				retrycancel()
 			}
-			fncancel()
 		}
 		w.done <- true
 	}()

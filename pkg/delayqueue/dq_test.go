@@ -64,10 +64,9 @@ func (s *DelayQueueTestSuite) TestPush() {
 		Counter: 1,
 	}
 	it1 := QueueItem{
-		Key:      "-one",
-		Score:    -1,
-		Counter:  2,
-		Deadline: 10,
+		Key:     "-one",
+		Score:   -1,
+		Counter: 2,
 	}
 	it2 := QueueItem{
 		Key:     "two",
@@ -78,6 +77,11 @@ func (s *DelayQueueTestSuite) TestPush() {
 		Key:     "three",
 		Score:   3,
 		Counter: 4,
+	}
+
+	deadline := time.Now().Add(time.Hour).Unix()
+	for _, it := range []*QueueItem{&it0, &it1, &it2, &it3} {
+		it.Deadline = deadline
 	}
 
 	err := s.queue.Push(ctx, par0, it0)
@@ -97,12 +101,12 @@ func (s *DelayQueueTestSuite) TestPush() {
 	mkey0 := s.queue.buildMKey(par0, it0.Key)
 	val, err := s.redisc.Get(context.Background(), mkey0).Result()
 	s.Require().NoError(err)
-	s.Assert().Equal("zero::1::0", val)
+	s.Assert().Equal(fmt.Sprintf("zero::1::%d", deadline), val)
 
 	mkey1 := s.queue.buildMKey(par0, it1.Key)
 	val, err = s.redisc.Get(context.Background(), mkey1).Result()
 	s.Require().NoError(err)
-	s.Assert().Equal("-one::2::10", val)
+	s.Assert().Equal(fmt.Sprintf("-one::2::%d", deadline), val)
 }
 
 func (s *DelayQueueTestSuite) TestRemove() {
@@ -128,6 +132,11 @@ func (s *DelayQueueTestSuite) TestRemove() {
 		Key:     "three",
 		Score:   3,
 		Counter: 4,
+	}
+
+	deadline := time.Now().Add(time.Hour).Unix()
+	for _, it := range []*QueueItem{&it0, &it1, &it2, &it3} {
+		it.Deadline = deadline
 	}
 
 	err := s.queue.Push(ctx, par0, it0)
@@ -172,6 +181,11 @@ func (s *DelayQueueTestSuite) TestSubscribe() {
 	it3 := QueueItem{
 		Key:   "three",
 		Score: 3,
+	}
+
+	deadline := time.Now().Add(time.Hour).Unix()
+	for _, it := range []*QueueItem{&it0, &it1, &it2, &it3} {
+		it.Deadline = deadline
 	}
 
 	err := s.queue.Push(ctx, par0, it0)
@@ -225,6 +239,11 @@ func (s *DelayQueueTestSuite) TestSubscribe_WithScore() {
 	it3 := QueueItem{
 		Key:   "three",
 		Score: 3,
+	}
+
+	deadline := time.Now().Add(time.Hour).Unix()
+	for _, it := range []*QueueItem{&it0, &it1, &it2, &it3} {
+		it.Deadline = deadline
 	}
 
 	err := s.queue.Push(ctx, par0, it0)
@@ -330,4 +349,19 @@ func (s *DelayQueueTestSuite) TestPartitionSlashCannotOverwriteOrRemoveAnotherJo
 	value, err = s.redisc.Get(ctx, s.queue.buildMKey("orders", "eu/42")).Result()
 	s.Require().NoError(err)
 	s.Assert().Equal(fmt.Sprintf("eu/42::0::%d", deadline), value)
+}
+
+func (s *DelayQueueTestSuite) TestPush_RejectExpiredOrUnreachableDeadline() {
+	ctx := context.Background()
+	now := time.Now().Unix()
+	for _, it := range []QueueItem{
+		{Key: "past", Deadline: now - 1},
+		{Key: "now", Deadline: now},
+		{Key: "too-late", Score: now + 60, Deadline: now + 30},
+	} {
+		s.Assert().Error(s.queue.Push(ctx, "orders", it))
+		count, err := s.redisc.Exists(ctx, s.queue.buildZKey("orders"), s.queue.buildMKey("orders", it.Key)).Result()
+		s.Require().NoError(err)
+		s.Assert().Zero(count, "rejected job must not be stored")
+	}
 }

@@ -37,6 +37,9 @@ func (q *Queue) Push(ctx context.Context, partition string, it QueueItem) error 
 	if partition == "" || strings.Contains(partition, "::") || strings.Contains(partition, "/") {
 		return ErrInvalidInput
 	}
+	if it.Deadline <= time.Now().Unix() || it.Score >= it.Deadline {
+		return ErrInvalidItem
+	}
 	zkey := q.buildZKey(partition)
 	mkey := q.buildMKey(partition, it.Key)
 	val, err := encodeItemValue(it)
@@ -48,7 +51,7 @@ func (q *Queue) Push(ctx context.Context, partition string, it QueueItem) error 
 	// a Remove command is sent, however, since no bad effect expected, we ignore that case
 	pipe := q.redisc.Pipeline()
 	pipe.ZAdd(ctx, zkey, &redis.Z{Score: float64(it.Score), Member: mkey})
-	pipe.Set(ctx, mkey, val, time.Duration(it.Deadline-time.Now().UTC().Unix())*time.Second)
+	pipe.SetArgs(ctx, mkey, val, redis.SetArgs{ExpireAt: time.Unix(it.Deadline, 0)})
 	if _, err := pipe.Exec(ctx); err != nil {
 		return fmt.Errorf("exec: %w", err)
 	}

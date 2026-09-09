@@ -261,3 +261,19 @@ func (s *schedulerTestSuite) TestRegisterPartition_RejectSlash() {
 	s.Require().NoError(err)
 	s.Assert().False(exists)
 }
+
+func (s *schedulerTestSuite) TestSchedule_RejectExpiredOrUnreachableDeadline() {
+	ctx := context.Background()
+	s.Require().NoError(s.sch.RegisterPartition(ctx, "orders", s.dummyHandlerFunc1))
+	now := time.Now().Unix()
+	for _, item := range []schedule.QueueItem{
+		{Partition: "orders", Key: "past", Deadline: time.Unix(now-1, 0)},
+		{Partition: "orders", Key: "now", Deadline: time.Unix(now, 0)},
+		{Partition: "orders", Key: "too-late", DelaySeconds: 60, Deadline: time.Unix(now+30, 0)},
+	} {
+		s.Assert().Error(s.sch.Schedule(ctx, item))
+		count, err := s.redisc.Exists(ctx, s.ns+"/sorted_sets/orders", s.ns+"/maps/orders/"+item.Key).Result()
+		s.Require().NoError(err)
+		s.Assert().Zero(count, "rejected job must not be stored")
+	}
+}
